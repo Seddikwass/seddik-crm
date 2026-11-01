@@ -4,7 +4,11 @@ const path = require('path');
 const { Pool } = require('../lib/pg');
 const { hashPassword } = require('../lib/security');
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgres://seddik:S3cret!pass@127.0.0.1:5433/seddik';
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error('DATABASE_URL manquant : ajoutez l\'adresse de connexion PostgreSQL dans les variables d\'environnement du service.');
+  process.exit(1);
+}
 const SCHEMA = (process.env.DB_SCHEMA || 'public').replace(/[^a-z0-9_]/gi, '');
 
 const db = new Pool(DATABASE_URL, { max: Number(process.env.DB_POOL || 5), searchPath: SCHEMA === 'public' ? undefined : SCHEMA + ',public' });

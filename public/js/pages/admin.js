@@ -78,8 +78,33 @@ route('/admin/entreprise/:id', async (view, p) => {
       columns: [{ label: 'Date', render: (r) => date(r.created_at) }, { label: 'Formule', render: (r) => `${r.plan_code}, ${r.months} mois` }, { label: 'Mode', render: (r) => METHOD[r.method] || r.method },
         { label: 'Référence', key: 'reference' }, { label: 'Statut', render: (r) => html`<span class="chip ${PAY_STATUS[r.status][1]}">${PAY_STATUS[r.status][0]}</span>` }, { label: 'Montant', align: 'r', render: (r) => money(r.amount) }],
       rows: c.payments, empty: 'Aucun paiement.',
-    })}</div></div>`);
+    })}</div>
+    <div class="panel" style="border-color:#F0C9C5"><div class="panel-head"><h2 style="color:var(--grenade)">Supprimer l'entreprise</h2></div>
+      <div class="panel-body row between">
+        <p class="text-2" style="margin:0;max-width:62ch">Efface définitivement ${c.name}, ${c.users.length === 1 ? 'son utilisateur' : `ses ${c.users.length} utilisateurs`} et toutes ses données : clients, fournisseurs, articles, documents, règlements, relances, comptabilité et historique d'abonnement. Pour seulement bloquer l'accès, utilisez plutôt « Suspendre ».</p>
+        <button class="btn danger" id="delete-company">${icon('trash', 16)} Supprimer l'entreprise</button>
+      </div></div>
+    </div>`);
   const reload = () => go('/admin/entreprise/' + c.id);
+  $('#delete-company', view).onclick = () => {
+    const k = c.counts || {};
+    const m = modal({
+      title: `Supprimer ${c.name}`,
+      body: html`<div class="notice warn" style="margin-bottom:14px">Cette action est définitive : les données ne pourront pas être récupérées.</div>
+        <p>Seront supprimés : ${c.users.length} utilisateur${c.users.length > 1 ? 's' : ''}, ${k.customers || 0} client${k.customers > 1 ? 's' : ''}, ${k.suppliers || 0} fournisseur${k.suppliers > 1 ? 's' : ''}, ${k.products || 0} article${k.products > 1 ? 's' : ''}, ${k.documents || 0} document${k.documents > 1 ? 's' : ''}, ${k.payments || 0} règlement${k.payments > 1 ? 's' : ''}, ainsi que la comptabilité et l'historique d'abonnement.</p>
+        <form id="del-form" class="grid" onsubmit="return false">${field(html`Pour confirmer, saisissez le nom de l'entreprise : <b>${c.name}</b>`, input('confirm', '', 'autocomplete="off" spellcheck="false"'))}</form>`,
+      actions: [{ label: 'Annuler' }, { label: 'Supprimer définitivement', kind: 'danger', onClick: async (mm) => {
+        const r = await post(`/api/admin/companies/${c.id}/delete`, formData($('#del-form', mm.el)));
+        toast(`${r.name} a été supprimée`, 'success');
+        go('/admin/entreprises');
+      } }],
+    });
+    const btn = m.el.querySelector('[data-act="1"]');
+    const box = m.el.querySelector('[name=confirm]');
+    const norm = (s) => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    btn.disabled = true;
+    box.addEventListener('input', () => { btn.disabled = norm(box.value) !== norm(c.name); });
+  };
   $('#sub-form', view).onsubmit = async (e) => { e.preventDefault(); try { await put('/api/admin/companies/' + c.id, formData(e.target)); toast('Abonnement mis à jour'); reload(); } catch (err) { fail(err); } };
   const top = document.getElementById('top-actions');
   on(top, 'click', '[data-ext]', async (e, b) => { try { await post(`/api/admin/companies/${c.id}/extend`, { days: Number(b.dataset.ext) }); toast('Abonnement prolongé'); reload(); } catch (err) { fail(err); } });

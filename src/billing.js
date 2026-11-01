@@ -188,7 +188,46 @@ function register(app) {
     if (!c) throw new HttpError(404, 'Entreprise introuvable.');
     const users = (await db.query('SELECT id, name, email, phone, role, active, last_login, created_at FROM users WHERE company_id = $1 ORDER BY id', [c.id])).rows;
     const payments = (await db.query('SELECT * FROM subscription_payments WHERE company_id = $1 ORDER BY id DESC', [c.id])).rows;
-    return { ...c, subscription: subscription(c), users, payments };
+    const counts = (await db.query(
+      `SELECT (SELECT count(*)::int FROM documents WHERE company_id = $1) AS documents,
+              (SELECT count(*)::int FROM customers WHERE company_id = $1) AS customers,
+              (SELECT count(*)::int FROM suppliers WHERE company_id = $1) AS suppliers,
+              (SELECT count(*)::int FROM products WHERE company_id = $1) AS products,
+              (SELECT count(*)::int FROM payments WHERE company_id = $1) AS payments`, [c.id])).rows[0];
+    return { ...c, subscription: subscription(c), users, payments, counts };
+  });
+
+  // Suppression définitive d'une entreprise cliente et de toutes ses données
+  app.post('/api/admin/companies/:id/delete', requireSuper, async (req) => {
+    const c = (await db.query('SELECT id, name FROM companies WHERE id = $1', [req.params.id])).rows[0];
+    if (!c) throw new HttpError(404, 'Entreprise introuvable.');
+    const norm = (s) => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    if (norm(req.body.confirm) !== norm(c.name)) throw new HttpError(400, 'Pour confirmer, saisissez exactement le nom de l\'entreprise.');
+    await db.tx(async (t) => {
+      // Ordre explicite : des enfants vers les parents, pour ne heurter aucune contrainte
+      const steps = [
+        'DELETE FROM payment_allocations WHERE payment_id IN (SELECT id FROM payments WHERE company_id = $1) OR document_id IN (SELECT id FROM documents WHERE company_id = $1)',
+        'DELETE FROM reminders WHERE company_id = $1',
+        'DELETE FROM stock_moves WHERE company_id = $1',
+        'DELETE FROM document_lines WHERE document_id IN (SELECT id FROM documents WHERE company_id = $1)',
+        'UPDATE documents SET source_id = NULL WHERE company_id = $1',
+        'DELETE FROM documents WHERE company_id = $1',
+        'DELETE FROM payments WHERE company_id = $1',
+        'DELETE FROM entry_lines WHERE company_id = $1',
+        'DELETE FROM entries WHERE company_id = $1',
+        'DELETE FROM products WHERE company_id = $1',
+        'DELETE FROM customers WHERE company_id = $1',
+        'DELETE FROM suppliers WHERE company_id = $1',
+        'DELETE FROM accounts WHERE company_id = $1',
+        'DELETE FROM counters WHERE company_id = $1',
+        'DELETE FROM subscription_payments WHERE company_id = $1',
+        'DELETE FROM users WHERE company_id = $1',
+        'DELETE FROM companies WHERE id = $1',
+      ];
+      for (const sql of steps) await t.query(sql, [c.id]);
+    });
+    console.log(`${new Date().toISOString()} Entreprise supprimée : #${c.id} « ${c.name} » par ${req.user.email}`);
+    return { deleted: true, name: c.name };
   });
 
   app.put('/api/admin/companies/:id', requireSuper, async (req) => {

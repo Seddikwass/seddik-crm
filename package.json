@@ -1,0 +1,14 @@
+{
+  "name": "seddik-crm",
+  "version": "1.0.0",
+  "description": "SEDDIK CRM — gestion commerciale et comptable en ligne pour les entreprises tunisiennes : ventes, recouvrement, achats, stocks, comptabilité, abonnements",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
